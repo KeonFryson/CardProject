@@ -6,10 +6,16 @@ using UnityEngine;
 public class GameManger : NetworkBehaviour
 {
     [SerializeField] private Transform playersHandPanel;
-    [SerializeField] private Transform OppentsHandPanel;
+    [SerializeField] private Transform opponentsHandPanel;
+    [SerializeField] private Transform yourDeckPanel;
+    [SerializeField] private Transform opponentsDeckPanel;
     [SerializeField] private GameObject cardPrefab;
     [SerializeField] private float fanSpread = 10f;
     [SerializeField] private float fanRadius = 8f;
+
+    [Header("Player Stats UI")]
+    [SerializeField] private PlayerStatsUI playerStatsUI;
+
 
     private List<Player> players = new List<Player>();
     private Dictionary<ulong, int> clientPlayerIndices = new Dictionary<ulong, int>();
@@ -33,7 +39,7 @@ public class GameManger : NetworkBehaviour
     public override void OnNetworkSpawn()
     {
         Debug.Log("GameManager OnNetworkSpawn: IsServer=" + IsServer);
-        PositionHandPanels();
+        PositionPanels();
         if (IsServer)
         {
             NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
@@ -49,20 +55,23 @@ public class GameManger : NetworkBehaviour
         {
             NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
             NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
-
         }
 
-        if(IsHost)
+        if (IsHost)
         {
             NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
             NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
         }
     }
-    private void PositionHandPanels()
+
+    private void PositionPanels()
     {
         // Example positions for anchored UI (adjust as needed)
         float playerHandY = 100f;      // Bottom of screen
         float opponentHandY = -50f;    // Top of screen
+        float decktOffset1 = 260f;
+        float decktOffset2 = 300f;
+        float deckSacle = 1.2f;
 
         // Set positions for both panels using RectTransform
         if (playersHandPanel != null && playersHandPanel is RectTransform playerRect)
@@ -72,14 +81,50 @@ public class GameManger : NetworkBehaviour
             playerRect.anchorMax = new Vector2(0.5f, 0f);
             playerRect.pivot = new Vector2(0.5f, 0f);
         }
-        if (OppentsHandPanel != null && OppentsHandPanel is RectTransform oppRect)
+        if (opponentsHandPanel != null && opponentsHandPanel is RectTransform oppRect)
         {
             oppRect.anchoredPosition = new Vector2(0, opponentHandY);
             oppRect.anchorMin = new Vector2(0.5f, 1f); // Center top
             oppRect.anchorMax = new Vector2(0.5f, 1f);
             oppRect.pivot = new Vector2(0.5f, 1f);
         }
+        if (yourDeckPanel != null && yourDeckPanel is RectTransform yourDeckRect)
+       {
+          yourDeckRect.anchoredPosition = new Vector2(-decktOffset1, decktOffset2);
+          yourDeckRect.anchorMin = new Vector2(1f, 0f); // Center bottom
+          yourDeckRect.anchorMax = new Vector2(1f, 0f);
+          yourDeckRect.pivot = new Vector2(1f, 0f);
+          yourDeckRect.localScale = Vector3.one * deckSacle;
+        }
+        if (opponentsDeckPanel != null && opponentsDeckPanel is RectTransform oppDeckRect)
+        {
+            oppDeckRect.anchoredPosition = new Vector2(decktOffset1, -decktOffset2);
+            oppDeckRect.anchorMin = new Vector2(0f, 1f); // Center top
+            oppDeckRect.anchorMax = new Vector2(0f, 1f);
+            oppDeckRect.pivot = new Vector2(0f, 1f);
+            oppDeckRect.localScale = Vector3.one * deckSacle;
+        }
     }
+
+    private void UpdatePlayerStatsUI()
+    {
+        if (players.Count < 2 || playerStatsUI == null)
+            return;
+
+        // Assume player 0 is local, player 1 is opponent
+        var localIndex = GetLocalPlayerIndex();
+        var opponentIndex = localIndex == 0 ? 1 : 0;
+
+        var player = players[localIndex];
+        var opponent = players[opponentIndex];
+
+        playerStatsUI.UpdateStats(
+            player.Hp, player.CurrentMana, player.MaxMana,
+            opponent.Hp, opponent.CurrentMana, opponent.MaxMana
+        );
+    }
+
+
     private void OnClientConnected(ulong clientId)
     {
         Debug.Log($"Client connected: {clientId}");
@@ -106,19 +151,22 @@ public class GameManger : NetworkBehaviour
 
         UpdateHandClientRpc(GetCardIds(player.Hand), assignedIndex);
 
-        // If only one player, add a bot as player 2
-        if (IsServer && clientPlayerIndices.Count == 1 && players.Count == 1)
-        {
-            Debug.Log("Spawning bot as player 2.");
-            var botDeck = CreateDeck();
-            var botPlayer = new Player(botDeck);
-            players.Add(botPlayer);
-            ShuffleDeck(botPlayer.Deck);
-            DrawStartingHand(botPlayer, 5);
 
-            // Optionally, update UI for bot hand (as opponent)
-            UpdateHandClientRpc(GetCardIds(botPlayer.Hand), 1);
+
+        if (players.Count == 2)
+        {
+            UpdateDeckClientRpc(GetCardIds(players[0].Deck), 0);
+            UpdateDeckClientRpc(GetCardIds(players[1].Deck), 1);
+
+            // Synchronize stats for all clients
+            var p0 = players[0];
+            var p1 = players[1];
+            UpdatePlayerStatsClientRpc(
+                p0.Hp, p0.CurrentMana, p0.MaxMana,
+                p1.Hp, p1.CurrentMana, p1.MaxMana
+            );
         }
+
 
         if (clientPlayerIndices.Count == 2)
         {
@@ -128,6 +176,8 @@ public class GameManger : NetworkBehaviour
             for (int i = 0; i < players.Count; i++)
                 UpdateHandClientRpc(GetCardIds(players[i].Hand), i);
         }
+
+        
     }
 
     private void OnClientDisconnected(ulong clientId)
@@ -138,6 +188,16 @@ public class GameManger : NetworkBehaviour
             clientPlayerIndices.Remove(clientId);
             if (index < players.Count)
                 players.RemoveAt(index);
+        }
+
+        if (players.Count == 2)
+        {
+            var p0 = players[0];
+            var p1 = players[1];
+            UpdatePlayerStatsClientRpc(
+                p0.Hp, p0.CurrentMana, p0.MaxMana,
+                p1.Hp, p1.CurrentMana, p1.MaxMana
+            );
         }
     }
 
@@ -156,6 +216,22 @@ public class GameManger : NetworkBehaviour
         player.Hand.Add(card);
         player.Deck.RemoveAt(0);
         UpdateHandClientRpc(GetCardIds(player.Hand), playerIndex);
+
+        // Update deck visuals after draw
+        if (playerIndex == 0)
+            UpdateDeckClientRpc(GetCardIds(player.Deck), playerIndex);
+        else
+            UpdateDeckClientRpc(GetCardIds(player.Deck), playerIndex);
+
+        if (players.Count == 2)
+        {
+            var p0 = players[0];
+            var p1 = players[1];
+            UpdatePlayerStatsClientRpc(
+                p0.Hp, p0.CurrentMana, p0.MaxMana,
+                p1.Hp, p1.CurrentMana, p1.MaxMana
+            );
+        }
     }
 
     [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
@@ -169,8 +245,24 @@ public class GameManger : NetworkBehaviour
         player.Field.Add(card);
         UpdateHandClientRpc(GetCardIds(player.Hand), playerIndex);
         UpdateFieldClientRpc(GetCardIds(player.Field), playerIndex);
+
+        // Update deck visuals after play
+        if (playerIndex == 0)
+            UpdateDeckClientRpc(GetCardIds(player.Deck), playerIndex);
+        else
+            UpdateDeckClientRpc(GetCardIds(player.Deck), playerIndex);
+
+        if (players.Count == 2)
+        {
+            var p0 = players[0];
+            var p1 = players[1];
+            UpdatePlayerStatsClientRpc(
+                p0.Hp, p0.CurrentMana, p0.MaxMana,
+                p1.Hp, p1.CurrentMana, p1.MaxMana
+            );
+        }
     }
-   
+
     [ClientRpc]
     private void UpdateHandClientRpc(FixedString64Bytes[] handCardIds, int playerIndex)
     {
@@ -190,10 +282,19 @@ public class GameManger : NetworkBehaviour
         else
         {
             // Show opponent's hand (card backs only)
-            ShowHandUI(new Player(new List<CardDataSO>()), OppentsHandPanel, handCards, true);
+            ShowHandUI(new Player(new List<CardDataSO>()), opponentsHandPanel, handCards, true);
+        }
+
+        if (players.Count == 2)
+        {
+            var p0 = players[0];
+            var p1 = players[1];
+            UpdatePlayerStatsClientRpc(
+                p0.Hp, p0.CurrentMana, p0.MaxMana,
+                p1.Hp, p1.CurrentMana, p1.MaxMana
+            );
         }
     }
-
 
     [ClientRpc]
     private void UpdateFieldClientRpc(FixedString64Bytes[] fieldCardIds, int playerIndex)
@@ -212,6 +313,21 @@ public class GameManger : NetworkBehaviour
         {
             Debug.Log("You won the game!");
         }
+
+    }
+
+    [ClientRpc]
+    private void UpdatePlayerStatsClientRpc(
+    int playerHp, int playerMana, int playerMaxMana,
+    int opponentHp, int opponentMana, int opponentMaxMana)
+    {
+        if (playerStatsUI == null)
+            return;
+
+        playerStatsUI.UpdateStats(
+            playerHp, playerMana, playerMaxMana,
+            opponentHp, opponentMana, opponentMaxMana
+        );
     }
 
     private int GetLocalPlayerIndex()
@@ -219,6 +335,7 @@ public class GameManger : NetworkBehaviour
         var localId = NetworkManager.Singleton.LocalClientId;
         return clientPlayerIndices.ContainsKey(localId) ? clientPlayerIndices[localId] : -1;
     }
+ 
 
     private void ShowHandUI(Player player, Transform handPanel, List<CardDataSO> handOverride = null, bool showBack = false)
     {
@@ -240,9 +357,9 @@ public class GameManger : NetworkBehaviour
             if (cardUIScript != null)
             {
                 cardUIScript.SetCard(cardData);
-                cardUIScript.SetCardBackVisible(showBack); // <-- Add this line
+                cardUIScript.SetCardBackVisible(showBack);
             }
-          
+
             cardsInHand.Add(cardGO);
 
             var canvas = cardGO.GetComponent<Canvas>();
@@ -254,6 +371,63 @@ public class GameManger : NetworkBehaviour
         }
 
         UpdateHandVisuals(cardsInHand, fanSpread);
+    }
+
+
+    [ClientRpc]
+    private void UpdateDeckClientRpc(FixedString64Bytes[] deckCardIds, int playerIndex)
+    {
+        var deckCards = new List<CardDataSO>();
+        foreach (var cardId in deckCardIds)
+        {
+            if (cardLookup.TryGetValue(cardId.ToString(), out var cardData))
+                deckCards.Add(cardData);
+        }
+
+        if (GetLocalPlayerIndex() == playerIndex)
+        {
+            ShowDeckUI(deckCards, yourDeckPanel, true);
+        }
+        else
+        {
+            ShowDeckUI(deckCards, opponentsDeckPanel, true);
+        }
+    }
+
+
+    private void ShowDeckUI(List<CardDataSO> deck, Transform deckPanel, bool showBack)
+    {
+        foreach (Transform child in deckPanel)
+            Destroy(child.gameObject);
+
+        float offset = 2.0f; // Adjust for more/less overlap
+        float zOffset = -1.0f; // To ensure correct layering in 3D space
+
+        for (int i = 0; i < deck.Count; i++)
+        {
+            var cardData = deck[i];
+            var cardGO = Instantiate(cardPrefab, deckPanel);
+
+            var cardUIScript = cardGO.GetComponent<CardUI>();
+            if (cardUIScript != null)
+            {
+                cardUIScript.SetCard(cardData);
+                cardUIScript.SetCardBackVisible(showBack);
+            }
+
+            // Stacked look: each card is slightly offset
+            cardGO.transform.localPosition = new Vector3(offset * i, -offset * i, zOffset * i);
+            cardGO.transform.localRotation = Quaternion.identity;
+             
+
+            // Ensure correct sorting order if using Canvas
+            var canvas = cardGO.GetComponent<Canvas>();
+            if (canvas != null)
+            {
+                canvas.overrideSorting = true;
+                canvas.sortingOrder = i;
+            }
+        }
     }
 
     private void UpdateHandVisuals(List<GameObject> cardsInHand, float fanSpread)
