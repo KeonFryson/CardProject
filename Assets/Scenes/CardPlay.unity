@@ -1440,7 +1440,7 @@ MonoBehaviour:
   cardPrefab: {fileID: 3611339291611890872, guid: cec9d813f0923de4da8170f0a11b64f6, type: 3}
   fanSpread: 10
   fanRadius: -1000
-  playerStatsUI: {fileID: 0}
+  playerStatsUI: {fileID: 1855728284}
 --- !u!224 &1162691345 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 6963635967176994190, guid: cec9d813f0923de4da8170f0a11b64f6, type: 3}
@@ -1838,13 +1838,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 1855728279}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b469710d1aad30647a062f416b6b80c4, type: 3}
+  m_Script: {fileID: 11500000, guid: ed40bddcac934ef4093c5c124d590d24, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerStatsUI
-  playerHpText: {fileID: 0}
-  playerManaText: {fileID: 0}
-  opponentHpText: {fileID: 0}
-  opponentManaText: {fileID: 0}
+  playerHpText: {fileID: 382050475}
+  playerManaText: {fileID: 920054328}
+  opponentHpText: {fileID: 1841035494}
+  opponentManaText: {fileID: 740558428}
 --- !u!1001 &1892580767
 PrefabInstance:
   m_ObjectHideFlags: 0
