@@ -5,6 +5,12 @@ TagManager:
   serializedVersion: 3
   tags:
   - Card
+  - PlayerField
+  - OpponentField
+  - PlayerTopRowSlot
+  - PlayerBottomRowSlot
+  - OpponentTopRowSlot
+  - OpponentBottomRowSlot
   layers:
   - Default
   - TransparentFX

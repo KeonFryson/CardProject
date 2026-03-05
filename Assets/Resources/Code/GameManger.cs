@@ -1,9 +1,10 @@
-using System.Collections.Generic;
-using Unity.Netcode;
-using Unity.Collections;
-using UnityEngine;
 using CardGame.Core;
 using CardGame.UI;
+using System.Collections.Generic;
+using System.Linq;
+using Unity.Collections;
+using Unity.Netcode;
+using UnityEngine;
 
 namespace CardGame.Core
 {
@@ -17,6 +18,12 @@ namespace CardGame.Core
         [SerializeField] private float fanSpread = 10f;
         [SerializeField] private float fanRadius = 8f;
 
+
+        [SerializeField] private Transform[] playerTopRowSlots;
+        [SerializeField] private Transform[] playerBottomRowSlots;
+        [SerializeField] private Transform[] opponentTopRowSlots;
+        [SerializeField] private Transform[] opponentBottomRowSlots;
+
         [Header("Player Stats UI")]
         [SerializeField] private PlayerStatsUI playerStatsUI;
 
@@ -28,6 +35,7 @@ namespace CardGame.Core
         // Cache all cards for lookup by name
         private Dictionary<string, CardDataSO> cardLookup;
         private DeckManager deckManager;
+        private UIManager uiManager;
 
         private void Awake()
         {
@@ -39,6 +47,47 @@ namespace CardGame.Core
                 cardLookup[card.Name] = card;
             }
             deckManager = new DeckManager(cardLookup);
+            uiManager = new UIManager(playersHandPanel, opponentsHandPanel, yourDeckPanel, opponentsDeckPanel, cardPrefab, fanSpread, fanRadius, playerStatsUI);
+
+            // Auto-find field slots by tag
+            playerTopRowSlots = FindSlotsByTag("PlayerTopRowSlot");
+            playerBottomRowSlots = FindSlotsByTag("PlayerBottomRowSlot");
+            opponentTopRowSlots = FindSlotsByTag("OpponentTopRowSlot");
+            opponentBottomRowSlots = FindSlotsByTag("OpponentBottomRowSlot");
+        }
+
+        private Transform[] FindSlotsByTag(string tag)
+        {
+            var slots = GameObject.FindGameObjectsWithTag(tag);
+            if (slots == null || slots.Length == 0)
+            {
+                Debug.LogWarning($"No slots found with tag: {tag}");
+                return new Transform[0];
+            }
+            // Order by name for consistent slot assignment
+            return slots.OrderBy(go => go.name).Select(go => go.transform).ToArray();
+        }
+
+        private void ClearFieldSlots()
+        {
+            // Clear all player and opponent slots
+            ClearSlots(playerTopRowSlots);
+            ClearSlots(playerBottomRowSlots);
+            ClearSlots(opponentTopRowSlots);
+            ClearSlots(opponentBottomRowSlots);
+        }
+
+        private void ClearSlots(Transform[] slots)
+        {
+            if (slots == null) return;
+            foreach (var slot in slots)
+            {
+                if (slot == null) continue;
+                foreach (Transform child in slot)
+                {
+                    Destroy(child.gameObject);
+                }
+            }
         }
 
         public override void OnNetworkSpawn()
@@ -111,28 +160,13 @@ namespace CardGame.Core
             }
         }
 
-        private void UpdatePlayerStatsUI()
-        {
-            if (players.Count < 2 || playerStatsUI == null)
-                return;
-
-            // Assume player 0 is local, player 1 is opponent
-            var localIndex = GetLocalPlayerIndex();
-            var opponentIndex = localIndex == 0 ? 1 : 0;
-
-            var player = players[localIndex];
-            var opponent = players[opponentIndex];
-
-            playerStatsUI.UpdateStats(
-                player.Hp, player.CurrentMana, player.MaxMana,
-                opponent.Hp, opponent.CurrentMana, opponent.MaxMana
-            );
-        }
+     
 
 
         private void OnClientConnected(ulong clientId)
         {
             Debug.Log($"Client connected: {clientId}");
+            ClearFieldSlots();
             int assignedIndex;
             if (clientId == NetworkManager.Singleton.LocalClientId && IsServer)
             {
@@ -269,12 +303,12 @@ namespace CardGame.Core
             if (GetLocalPlayerIndex() == playerIndex)
             {
                 // Show your own hand (face up)
-                ShowHandUI(new Player(new List<CardDataSO>()), playersHandPanel, handCards, false);
+                uiManager.ShowHandUI(new Player(new List<CardDataSO>()), playersHandPanel, handCards, false);
             }
             else
             {
                 // Show opponent's hand (card backs only)
-                ShowHandUI(new Player(new List<CardDataSO>()), opponentsHandPanel, handCards, true);
+                uiManager.ShowHandUI(new Player(new List<CardDataSO>()), opponentsHandPanel, handCards, true);
             }
 
             if (players.Count == 2)
@@ -288,10 +322,36 @@ namespace CardGame.Core
             }
         }
 
+       
         [ClientRpc]
         private void UpdateFieldClientRpc(FixedString64Bytes[] fieldCardIds, int playerIndex)
         {
-            // Implement field UI update here if needed, using cardLookup as above
+            // Example: Assume first 5 cards are top row, next 5 are bottom row
+            var topRow = fieldCardIds.Take(5).ToArray();
+            var bottomRow = fieldCardIds.Skip(5).Take(5).ToArray();
+
+            Transform[] topSlots = playerIndex == GetLocalPlayerIndex() ? playerTopRowSlots : opponentTopRowSlots;
+            Transform[] bottomSlots = playerIndex == GetLocalPlayerIndex() ? playerBottomRowSlots : opponentBottomRowSlots;
+
+            for (int i = 0; i < topSlots.Length; i++)
+            {
+                // Clear slot, then instantiate card if exists
+                foreach (Transform child in topSlots[i]) Destroy(child.gameObject);
+                if (i < topRow.Length && cardLookup.TryGetValue(topRow[i].ToString(), out var cardData))
+                {
+                    var cardObj = Instantiate(cardPrefab, topSlots[i]);
+                    // Optionally set card visuals here
+                }
+            }
+            for (int i = 0; i < bottomSlots.Length; i++)
+            {
+                foreach (Transform child in bottomSlots[i]) Destroy(child.gameObject);
+                if (i < bottomRow.Length && cardLookup.TryGetValue(bottomRow[i].ToString(), out var cardData))
+                {
+                    var cardObj = Instantiate(cardPrefab, bottomSlots[i]);
+                    // Optionally set card visuals here
+                }
+            }
         }
 
         [ClientRpc]
@@ -328,44 +388,6 @@ namespace CardGame.Core
             return clientPlayerIndices.ContainsKey(localId) ? clientPlayerIndices[localId] : -1;
         }
 
-
-        private void ShowHandUI(Player player, Transform handPanel, List<CardDataSO> handOverride = null, bool showBack = false)
-        {
-            foreach (Transform child in handPanel)
-                Destroy(child.gameObject);
-
-            var handList = handOverride ?? player.Hand;
-            int cardCount = handList.Count;
-            if (cardCount == 0) return;
-
-            var cardsInHand = new List<GameObject>();
-
-            for (int i = 0; i < cardCount; i++)
-            {
-                var cardData = handList[i];
-                var cardGO = Instantiate(cardPrefab, handPanel);
-
-                var cardUIScript = cardGO.GetComponent<CardUI>();
-                if (cardUIScript != null)
-                {
-                    cardUIScript.SetCard(cardData);
-                    cardUIScript.SetCardBackVisible(showBack);
-                }
-
-                cardsInHand.Add(cardGO);
-
-                var canvas = cardGO.GetComponent<Canvas>();
-                if (canvas != null)
-                {
-                    canvas.overrideSorting = true;
-                    canvas.sortingOrder = i;
-                }
-            }
-
-            UpdateHandVisuals(cardsInHand, fanSpread);
-        }
-
-
         [ClientRpc]
         private void UpdateDeckClientRpc(FixedString64Bytes[] deckCardIds, int playerIndex)
         {
@@ -378,68 +400,11 @@ namespace CardGame.Core
 
             if (GetLocalPlayerIndex() == playerIndex)
             {
-                ShowDeckUI(deckCards, yourDeckPanel, true);
+                uiManager.ShowDeckUI(deckCards, yourDeckPanel, true);
             }
             else
             {
-                ShowDeckUI(deckCards, opponentsDeckPanel, true);
-            }
-        }
-
-
-        private void ShowDeckUI(List<CardDataSO> deck, Transform deckPanel, bool showBack)
-        {
-            foreach (Transform child in deckPanel)
-                Destroy(child.gameObject);
-
-            float offset = 2.0f; // Adjust for more/less overlap
-            float zOffset = -1.0f; // To ensure correct layering in 3D space
-
-            for (int i = 0; i < deck.Count; i++)
-            {
-                var cardData = deck[i];
-                var cardGO = Instantiate(cardPrefab, deckPanel);
-
-                var cardUIScript = cardGO.GetComponent<CardUI>();
-                if (cardUIScript != null)
-                {
-                    cardUIScript.SetCard(cardData);
-                    cardUIScript.SetCardBackVisible(showBack);
-                }
-
-                // Stacked look: each card is slightly offset
-                cardGO.transform.localPosition = new Vector3(offset * i, -offset * i, zOffset * i);
-                cardGO.transform.localRotation = Quaternion.identity;
-
-
-                // Ensure correct sorting order if using Canvas
-                var canvas = cardGO.GetComponent<Canvas>();
-                if (canvas != null)
-                {
-                    canvas.overrideSorting = true;
-                    canvas.sortingOrder = i;
-                }
-            }
-        }
-
-        private void UpdateHandVisuals(List<GameObject> cardsInHand, float fanSpread)
-        {
-            int cardCount = cardsInHand.Count;
-            if (cardCount == 0) return;
-
-            float totalAngle = fanSpread * (cardCount - 1);
-            float startAngle = -totalAngle / 2f;
-
-            for (int i = 0; i < cardCount; i++)
-            {
-                float angle = startAngle + fanSpread * i;
-                float rad = angle * Mathf.Deg2Rad;
-
-                float x = Mathf.Sin(rad) * fanRadius;
-                float y = -Mathf.Cos(rad) * fanRadius + fanRadius;
-
-                cardsInHand[i].transform.localPosition = new Vector3(x, y, 0f);
-                cardsInHand[i].transform.localRotation = Quaternion.Euler(0f, 0f, angle);
+                uiManager.ShowDeckUI(deckCards, opponentsDeckPanel, true);
             }
         }
     }
