@@ -1,0 +1,6 @@
+C:\Users\Admin\OneDrive\Documents\GitHub\Card Project\BenchmarkSuite1\obj\Debug\net9.0\BenchmarkSuite1.csproj.AssemblyReference.cache
+C:\Users\Admin\OneDrive\Documents\GitHub\Card Project\BenchmarkSuite1\obj\Debug\net9.0\BenchmarkSuite1.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Admin\OneDrive\Documents\GitHub\Card Project\BenchmarkSuite1\obj\Debug\net9.0\BenchmarkSuite1.AssemblyInfoInputs.cache
+C:\Users\Admin\OneDrive\Documents\GitHub\Card Project\BenchmarkSuite1\obj\Debug\net9.0\BenchmarkSuite1.AssemblyInfo.cs
+C:\Users\Admin\OneDrive\Documents\GitHub\Card Project\BenchmarkSuite1\obj\Debug\net9.0\BenchmarkSuite1.csproj.CoreCompileInputs.cache
+C:\Users\Admin\OneDrive\Documents\GitHub\Card Project\BenchmarkSuite1\obj\Debug\net9.0\BenchmarkSuite1.sourcelink.json

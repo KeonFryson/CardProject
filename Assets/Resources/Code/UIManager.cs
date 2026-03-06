@@ -47,7 +47,7 @@ namespace CardGame.Core
                 var cardUIScript = cardGO.GetComponent<CardUI>();
                 if (cardUIScript != null)
                 {
-                    cardUIScript.SetCard(cardData);
+                    cardUIScript.SetCard(cardData, i); // pass i so TryPlayToField knows which hand slot this is
                     cardUIScript.SetCardBackVisible(showBack);
                 }
 
@@ -69,8 +69,8 @@ namespace CardGame.Core
             foreach (Transform child in deckPanel)
                 Object.Destroy(child.gameObject);
 
-            float offset = 2.0f; // Adjust for more/less overlap
-            float zOffset = -1.0f; // To ensure correct layering in 3D space
+            float offset = 2.0f;
+            float zOffset = -1.0f;
 
             for (int i = 0; i < deck.Count; i++)
             {
@@ -84,11 +84,9 @@ namespace CardGame.Core
                     cardUIScript.SetCardBackVisible(showBack);
                 }
 
-                // Stacked look: each card is slightly offset
                 cardGO.transform.localPosition = new Vector3(offset * i, -offset * i, zOffset * i);
                 cardGO.transform.localRotation = Quaternion.identity;
 
-                // Ensure correct sorting order if using Canvas
                 var canvas = cardGO.GetComponent<Canvas>();
                 if (canvas != null)
                 {

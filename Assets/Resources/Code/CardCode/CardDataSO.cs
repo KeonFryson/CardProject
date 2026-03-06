@@ -22,5 +22,17 @@ namespace CardGame.Core
         [SerializeField]
         private int attack;
         public int Attack => attack;
+
+        [SerializeField]
+        private int health;
+        public int Health => health;
+
+        [SerializeField]
+        private CardEffect effect;
+        public CardEffect Effect => effect;
+
+        [SerializeField]
+        private int effectValue;
+        public int EffectValue => effectValue;
     }
 }

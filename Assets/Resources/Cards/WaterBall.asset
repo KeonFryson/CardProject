@@ -16,3 +16,6 @@ MonoBehaviour:
   type: 0
   manaCost: 2
   attack: 1
+  health: 0
+  effect: 1
+  effectValue: 1
